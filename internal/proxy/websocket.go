@@ -145,17 +145,7 @@ func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path str
 		// Socket.IO specific settings
 		dialer.Subprotocols = nil // Clear any subprotocols
 		dialer.EnableCompression = false // Disable compression for Socket.IO
-
-		// Copy Socket.IO specific headers
-		if key := headers["Sec-WebSocket-Key"]; key != "" {
-			header.Set("Sec-WebSocket-Key", key)
-		}
-		if version := headers["Sec-WebSocket-Version"]; version != "" {
-			header.Set("Sec-WebSocket-Version", version)
-		}
-		if extensions := headers["Sec-WebSocket-Extensions"]; extensions != "" {
-			header.Set("Sec-WebSocket-Extensions", extensions)
-		}
+		p.logger.Debug("Socket.IO connection detected, cleared subprotocols and disabled compression")
 	} else if proto := headers["Sec-WebSocket-Protocol"]; proto != "" {
 		// Handle array-like protocol values for non-Socket.IO connections
 		if strings.HasPrefix(proto, "[") && strings.HasSuffix(proto, "]") {
