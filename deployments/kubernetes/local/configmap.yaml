@@ -76,7 +76,7 @@ data:
           timeout: 5
 
       # Crash Game WebSocket Consumer Service
-      - name: "socketio-service"
+      - name: "ice-age-royal-consumer"
         base_path: "/games/ice-age-royal/consumer"
         targets:
           - "http://consumer-service.crash-game-backend-local.svc.cluster.local"
@@ -84,7 +84,23 @@ data:
         enable_websocket: true
         enable_sticky_session: true
         headers:
-          X-Service: "socketio-service"
+          X-Service: "ice-age-royal-consumer"
+          X-Source: "api-gateway"
+        health_check:
+          path: "/health"
+          interval: 30
+          timeout: 5
+
+      # Crash Game WebSocket Interaction Service
+      - name: "ice-age-royal-interaction"
+        base_path: "/games/ice-age-royal/interaction"
+        targets:
+          - "http://interaction-service.crash-game-backend-local.svc.cluster.local"
+        strip_base_path: true
+        enable_websocket: true
+        enable_sticky_session: true
+        headers:
+          X-Service: "ice-age-royal-interaction"
           X-Source: "api-gateway"
         health_check:
           path: "/health"

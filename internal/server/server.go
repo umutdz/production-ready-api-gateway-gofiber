@@ -127,6 +127,7 @@ func (s *Server) registerRoutes() error {
 		if err := s.router.RegisterService(s.app, svc); err != nil {
 			return fmt.Errorf("failed to register service %s: %w", svc.Name, err)
 		}
+		s.logger.Info("Registered service", "service", svc.Name)
 	}
 
 	return nil

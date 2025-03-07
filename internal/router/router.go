@@ -78,109 +78,41 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 	if svc.EnableWebSocket {
 		// Remove trailing slash for WebSocket path matching
 		wsPath := basePath
-		if strings.HasSuffix(wsPath, "/") {
-			wsPath = strings.TrimSuffix(wsPath, "/")
-		}
+		wsPath = strings.TrimSuffix(wsPath, "/")
 
 		// For Socket.IO support, we need to handle the /socket.io path
-		if strings.Contains(wsPath, "/consumer") {
-			socketIOPath := "/socket.io/*"
+		socketIOPath := "/socket.io/*"
 
-			// Socket.IO handler
-			app.Get(socketIOPath, func(c *fiber.Ctx) error {
-				if websocket.IsWebSocketUpgrade(c) {
-					r.logger.Debug("Socket.IO upgrade request detected",
-						"service", svc.Name,
-						"path", c.Path(),
-						"original_url", c.OriginalURL(),
-						"query_params", string(c.Context().QueryArgs().QueryString()),
-						"headers", c.GetReqHeaders())
-
-					// Prepare headers before upgrade
-					headers := make(map[string]string)
-
-					// Store original headers for WebSocket
-					for _, key := range []string{
-						"Sec-WebSocket-Key",
-						"Sec-WebSocket-Version",
-						"Sec-WebSocket-Extensions",
-						"Sec-WebSocket-Protocol",
-					} {
-						if value := c.Get(key); value != "" {
-							headers[key] = value
-						}
-					}
-
-					// Add forwarded headers
-					headers["X-Real-IP"] = c.IP()
-					headers["X-Forwarded-For"] = c.Get("X-Forwarded-For")
-					if headers["X-Forwarded-For"] == "" {
-						headers["X-Forwarded-For"] = c.IP()
-					}
-
-					// Store query parameters
-					queryString := string(c.Context().QueryArgs().QueryString())
-					if queryString != "" {
-						headers["X-Original-Query"] = queryString
-					}
-
-					// Get the full path including query parameters
-					fullPath := c.Path()
-					if queryString != "" {
-						fullPath = fmt.Sprintf("%s?%s", strings.TrimSuffix(fullPath, "/*"), queryString)
-					} else {
-						fullPath = strings.TrimSuffix(fullPath, "/*")
-					}
-
-					r.logger.Debug("Socket.IO headers prepared",
-						"headers", headers,
-						"path", fullPath)
-
-					// Store everything we need in locals
-					c.Locals("ws_headers", headers)
-					c.Locals("ws_path", fullPath)
-					c.Locals("allowed", true)
-
-					return websocket.New(func(conn *websocket.Conn) {
-						wsHeaders := conn.Locals("ws_headers").(map[string]string)
-						wsPath := conn.Locals("ws_path").(string)
-
-						r.logger.Info("Handling Socket.IO connection",
-							"service", svc.Name,
-							"path", wsPath,
-							"headers", wsHeaders)
-
-						if err := r.handleWebSocket(conn, svc, wsPath, wsHeaders); err != nil {
-							r.logger.Error("Socket.IO handling error",
-								"error", err,
-								"service", svc.Name,
-								"path", wsPath)
-						}
-					}, websocket.Config{
-						HandshakeTimeout: 10 * time.Second,
-					})(c)
-				}
-				return c.Next()
-			})
-		}
-
-		// Regular WebSocket handler
-		app.Get(wsPath, func(c *fiber.Ctx) error {
+		// Socket.IO handler
+		app.Get(socketIOPath, func(c *fiber.Ctx) error {
 			if websocket.IsWebSocketUpgrade(c) {
-				r.logger.Debug("WebSocket upgrade request detected",
+				r.logger.Debug("Socket.IO upgrade request detected",
 					"service", svc.Name,
 					"path", c.Path(),
 					"original_url", c.OriginalURL(),
-					"base_path", basePath,
 					"query_params", string(c.Context().QueryArgs().QueryString()),
 					"headers", c.GetReqHeaders())
 
 				// Prepare headers before upgrade
 				headers := make(map[string]string)
-				for k, v := range c.GetReqHeaders() {
-					if len(v) > 0 {
-						headers[k] = v[0]
+
+				// Store original headers for WebSocket
+				for _, key := range []string{
+					"Sec-WebSocket-Key",
+					"Sec-WebSocket-Version",
+					"Sec-WebSocket-Extensions",
+					"Sec-WebSocket-Protocol",
+				} {
+					if value := c.Get(key); value != "" {
+						headers[key] = value
 					}
+				}
+
+				// Add forwarded headers
+				headers["X-Real-IP"] = c.IP()
+				headers["X-Forwarded-For"] = c.Get("X-Forwarded-For")
+				if headers["X-Forwarded-For"] == "" {
+					headers["X-Forwarded-For"] = c.IP()
 				}
 
 				// Store query parameters
@@ -189,30 +121,34 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 					headers["X-Original-Query"] = queryString
 				}
 
-				// Get the path for proxying
-				path := ""
-				if svc.StripBasePath {
-					path = strings.TrimPrefix(c.Path(), basePath)
+				// Get the full path including query parameters
+				fullPath := c.Path()
+				if queryString != "" {
+					fullPath = fmt.Sprintf("%s?%s", strings.TrimSuffix(fullPath, "/*"), queryString)
 				} else {
-					path = wsPath
+					fullPath = strings.TrimSuffix(fullPath, "/*")
 				}
+
+				r.logger.Debug("Socket.IO headers prepared",
+					"headers", headers,
+					"path", fullPath)
 
 				// Store everything we need in locals
 				c.Locals("ws_headers", headers)
-				c.Locals("ws_path", path)
+				c.Locals("ws_path", fullPath)
 				c.Locals("allowed", true)
 
 				return websocket.New(func(conn *websocket.Conn) {
 					wsHeaders := conn.Locals("ws_headers").(map[string]string)
 					wsPath := conn.Locals("ws_path").(string)
 
-					r.logger.Info("Handling WebSocket connection",
+					r.logger.Info("Handling Socket.IO connection",
 						"service", svc.Name,
 						"path", wsPath,
 						"headers", wsHeaders)
 
 					if err := r.handleWebSocket(conn, svc, wsPath, wsHeaders); err != nil {
-						r.logger.Error("WebSocket handling error",
+						r.logger.Error("Socket.IO handling error",
 							"error", err,
 							"service", svc.Name,
 							"path", wsPath)
@@ -223,6 +159,8 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 			}
 			return c.Next()
 		})
+
+
 
 		r.logger.Info("Registered WebSocket routes",
 			"service", svc.Name,
