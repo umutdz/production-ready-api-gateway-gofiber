@@ -76,27 +76,23 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 
 	// Special handling for WebSocket routes if enabled
 	if svc.EnableWebSocket {
-		// Remove trailing slash for WebSocket path matching
 		wsPath := basePath
 		wsPath = strings.TrimSuffix(wsPath, "/")
 
-		// For Socket.IO support, we need to handle the /socket.io path
-		socketIOPath := "/socket.io/*"
+		// Dinamik WebSocket yolunu tanımla
+		websocketPath := wsPath + "/*"
 
-		// Socket.IO handler
-		app.Get(socketIOPath, func(c *fiber.Ctx) error {
+		app.Get(websocketPath, func(c *fiber.Ctx) error {
 			if websocket.IsWebSocketUpgrade(c) {
-				r.logger.Debug("Socket.IO upgrade request detected",
+				r.logger.Debug("WebSocket upgrade request detected",
 					"service", svc.Name,
 					"path", c.Path(),
 					"original_url", c.OriginalURL(),
 					"query_params", string(c.Context().QueryArgs().QueryString()),
 					"headers", c.GetReqHeaders())
 
-				// Prepare headers before upgrade
+				// Headers hazırlama
 				headers := make(map[string]string)
-
-				// Store original headers for WebSocket
 				for _, key := range []string{
 					"Sec-WebSocket-Key",
 					"Sec-WebSocket-Version",
@@ -107,21 +103,16 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 						headers[key] = value
 					}
 				}
-
-				// Add forwarded headers
 				headers["X-Real-IP"] = c.IP()
 				headers["X-Forwarded-For"] = c.Get("X-Forwarded-For")
 				if headers["X-Forwarded-For"] == "" {
 					headers["X-Forwarded-For"] = c.IP()
 				}
-
-				// Store query parameters
 				queryString := string(c.Context().QueryArgs().QueryString())
 				if queryString != "" {
 					headers["X-Original-Query"] = queryString
 				}
 
-				// Get the full path including query parameters
 				fullPath := c.Path()
 				if queryString != "" {
 					fullPath = fmt.Sprintf("%s?%s", strings.TrimSuffix(fullPath, "/*"), queryString)
@@ -129,11 +120,10 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 					fullPath = strings.TrimSuffix(fullPath, "/*")
 				}
 
-				r.logger.Debug("Socket.IO headers prepared",
+				r.logger.Debug("WebSocket headers prepared",
 					"headers", headers,
 					"path", fullPath)
 
-				// Store everything we need in locals
 				c.Locals("ws_headers", headers)
 				c.Locals("ws_path", fullPath)
 				c.Locals("allowed", true)
@@ -142,13 +132,13 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 					wsHeaders := conn.Locals("ws_headers").(map[string]string)
 					wsPath := conn.Locals("ws_path").(string)
 
-					r.logger.Info("Handling Socket.IO connection",
+					r.logger.Info("Handling WebSocket connection",
 						"service", svc.Name,
 						"path", wsPath,
 						"headers", wsHeaders)
 
 					if err := r.handleWebSocket(conn, svc, wsPath, wsHeaders); err != nil {
-						r.logger.Error("Socket.IO handling error",
+						r.logger.Error("WebSocket handling error",
 							"error", err,
 							"service", svc.Name,
 							"path", wsPath)
@@ -160,12 +150,9 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 			return c.Next()
 		})
 
-
-
 		r.logger.Info("Registered WebSocket routes",
 			"service", svc.Name,
-			"base_path", wsPath,
-			"socket_io_enabled", strings.Contains(wsPath, "/consumer"))
+			"base_path", wsPath)
 	}
 
 	// Register HTTP routes
@@ -235,9 +222,20 @@ func (r *Router) handleWebSocket(c *websocket.Conn, svc config.ServiceConfig, pa
 	if err != nil {
 		return fmt.Errorf("failed to get target service URL: %w", err)
 	}
+    wsPath := path
+    if svc.StripBasePath {
+        wsPath = strings.TrimPrefix(path, svc.BasePath)
+        if wsPath == "" {
+            wsPath = "/" // Boşsa kök dizine yönlendir
+        }
+    }
 
+    // İç servis için varsayılan WebSocket yolunu ekle (örneğin /socket.io)
+    if !strings.HasPrefix(wsPath, "/socket.io") {
+        wsPath = "/socket.io" + wsPath
+    }
 	// Proxy WebSocket connection
-	if err := r.wsProxy.ProxyWebSocket(c, target, path, headers); err != nil {
+	if err := r.wsProxy.ProxyWebSocket(c, target, wsPath, headers); err != nil {
 		return fmt.Errorf("failed to proxy WebSocket: %w", err)
 	}
 
