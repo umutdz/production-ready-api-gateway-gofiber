@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/fiber/v2/middleware/requestid"
 
 	"api-gateway/internal/config"
 	"api-gateway/internal/middleware"
@@ -52,7 +53,7 @@ func New(cfg *config.Config, logger *logging.Logger) (*Server, error) {
 	}
 
 	// Add custom middleware
-	app.Use(middleware.RequestID())
+	app.Use(requestid.New())
 	app.Use(middleware.Logger(logger))
 
 	// Add security middleware if enabled
