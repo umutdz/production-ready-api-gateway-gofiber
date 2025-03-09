@@ -79,7 +79,7 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 		wsPath := basePath
 		wsPath = strings.TrimSuffix(wsPath, "/")
 
-		// Dinamik WebSocket yolunu tanımla
+		// Dynamic WebSocket path
 		websocketPath := wsPath + "/*"
 
 		app.Get(websocketPath, func(c *fiber.Ctx) error {
@@ -91,8 +91,19 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 					"query_params", string(c.Context().QueryArgs().QueryString()),
 					"headers", c.GetReqHeaders())
 
-				// Headers hazırlama
+				// Prepare headers
 				headers := make(map[string]string)
+				for key, values := range c.GetReqHeaders() {
+					for _, value := range values {
+						if value != "" {
+							if !strings.HasPrefix(strings.ToLower(key), "sec-websocket-") &&
+							!strings.EqualFold(key, "Upgrade") &&
+							!strings.EqualFold(key, "Connection") {
+								headers[key] = value
+							}
+						}
+					}
+				}
 				for _, key := range []string{
 					"Sec-WebSocket-Key",
 					"Sec-WebSocket-Version",

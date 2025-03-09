@@ -40,6 +40,7 @@ func NewHTTPProxy(cfg *config.Config, logger *logging.Logger) (*HTTPProxy, error
 	}
 
 	// Create cache if enabled
+	// TODO: Cache change to redis from in-memory cache
 	var c *cache.Cache
 	var err error
 	if cfg.Proxy.EnableCache {
@@ -67,7 +68,7 @@ func (p *HTTPProxy) Forward(c *fiber.Ctx, target, path string, svc config.Servic
 		return c.Next()
 	}
 
-	// Check if response is in cache
+	// Check if response is in cache - TODO: Cache change to redis from in-memory cache
 	if p.config.Proxy.EnableCache && p.cache != nil && c.Method() == fiber.MethodGet {
 		queryString := c.Request().URI().QueryString()
 		cacheKey := getCacheKey(c.Path(), string(queryString))
