@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/sony/gobreaker"
-
+	"go.uber.org/zap"
 	"api-gateway/internal/config"
 	"api-gateway/pkg/logging"
 )
@@ -31,8 +31,8 @@ func NewCircuitBreaker(cfg *config.Config, logger *logging.Logger) (*CircuitBrea
 		},
 		OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
 			logger.Info("Circuit breaker state changed",
-				"from", from.String(),
-				"to", to.String(),
+				zap.String("from", from.String()),
+				zap.String("to", to.String()),
 			)
 		},
 	}

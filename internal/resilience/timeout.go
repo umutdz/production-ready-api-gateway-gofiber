@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-
+	"go.uber.org/zap"
 	"api-gateway/internal/config"
 	"api-gateway/pkg/logging"
 )
@@ -47,7 +47,7 @@ func (t *Timeout) Execute(fn func() error, timeoutDuration time.Duration) error 
 	case err := <-done:
 		return err
 	case <-ctx.Done():
-		t.logger.Warn("Operation timed out", "timeout", timeoutDuration)
+		t.logger.Warn("Operation timed out", zap.Duration("timeout", timeoutDuration))
 		return fiber.NewError(fiber.StatusGatewayTimeout, "Request timed out")
 	}
 }

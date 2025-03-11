@@ -11,7 +11,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
-
+	"go.uber.org/zap"
 	"api-gateway/internal/config"
 	"api-gateway/internal/middleware"
 	"api-gateway/internal/router"
@@ -128,7 +128,7 @@ func (s *Server) registerRoutes() error {
 		if err := s.router.RegisterService(s.app, svc); err != nil {
 			return fmt.Errorf("failed to register service %s: %w", svc.Name, err)
 		}
-		s.logger.Info("Registered service", "service", svc.Name)
+		s.logger.Info("Registered service", zap.String("service", svc.Name))
 	}
 
 	return nil

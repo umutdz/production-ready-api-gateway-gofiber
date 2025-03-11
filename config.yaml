@@ -26,13 +26,18 @@ security:
   tls_key_file: "key.pem"
   enable_cors: true
   cors_allow_origins:
-    - "*"
+    - "http://consumer-service.crash-game-backend-local.svc.cluster.local"
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+    - "http://localhost"
+    - "http://api-gateway.gateway"
+    - "http://api-gateway"
 
 resilience:
-  enable_circuit_breaker: true
+  enable_circuit_breaker: false
   failure_threshold: 5
   reset_timeout: 30
-  enable_retry: true
+  enable_retry: false
   max_retries: 3
   retry_interval: 100
 
@@ -46,49 +51,24 @@ metrics:
   path: "/metrics"
 
 services:
-  - name: "user-service"
-    base_path: "/api/users"
+  # Crash Game API Service
+  - name: "ice-age-royal-api"
+    base_path: "/games/ice-age-royal"
     targets:
-      - "http://localhost:8081"
+      - "http://api-service.crash-game-backend-local.svc.cluster.local"
     strip_base_path: true
     enable_websocket: false
     enable_sticky_session: false
     headers:
-      X-Service: "user-service"
+      X-Service: "ice-age-royal-api"
+      X-Source: "api-gateway"
     health_check:
       path: "/health"
       interval: 30
       timeout: 5
 
-  - name: "product-service"
-    base_path: "/api/products"
-    targets:
-      - "http://localhost:8082"
-    strip_base_path: true
-    enable_websocket: false
-    enable_sticky_session: false
-    headers:
-      X-Service: "product-service"
-    health_check:
-      path: "/health"
-      interval: 30
-      timeout: 5
-
-  - name: "chat-service"
-    base_path: "/api/chat"
-    targets:
-      - "http://localhost:8083"
-    strip_base_path: true
-    enable_websocket: true
-    enable_sticky_session: true
-    headers:
-      X-Service: "chat-service"
-    health_check:
-      path: "/health"
-      interval: 30
-      timeout: 5
-
-  - name: "socketio-service"
+  # Crash Game WebSocket Consumer Service
+  - name: "ice-age-royal-consumer"
     base_path: "/games/ice-age-royal/consumer"
     targets:
       - "http://consumer-service.crash-game-backend-local.svc.cluster.local"
@@ -96,7 +76,23 @@ services:
     enable_websocket: true
     enable_sticky_session: true
     headers:
-      X-Service: "socketio-service"
+      X-Service: "ice-age-royal-consumer"
+      X-Source: "api-gateway"
+    health_check:
+      path: "/health"
+      interval: 30
+      timeout: 5
+
+  # Crash Game WebSocket Interaction Service
+  - name: "ice-age-royal-interaction"
+    base_path: "/games/ice-age-royal/interaction"
+    targets:
+      - "http://interaction-service.crash-game-backend-local.svc.cluster.local"
+    strip_base_path: true
+    enable_websocket: true
+    enable_sticky_session: true
+    headers:
+      X-Service: "ice-age-royal-interaction"
       X-Source: "api-gateway"
     health_check:
       path: "/health"

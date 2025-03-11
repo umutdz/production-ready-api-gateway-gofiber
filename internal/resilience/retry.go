@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/eapache/go-resiliency/retrier"
-
+	"go.uber.org/zap"
 	"api-gateway/internal/config"
 	"api-gateway/pkg/logging"
 )
@@ -44,9 +44,9 @@ func (r *Retrier) Execute(fn func() error) error {
 		err := fn()
 		if err != nil {
 			r.logger.Debug("Retry attempt failed",
-				"attempt", attempt,
-				"maxRetries", r.config.Resilience.MaxRetries,
-				"error", err,
+				zap.Int("attempt", attempt),
+				zap.Int("maxRetries", r.config.Resilience.MaxRetries),
+				zap.Error(err),
 			)
 			lastErr = err
 			return err
@@ -56,8 +56,8 @@ func (r *Retrier) Execute(fn func() error) error {
 
 	if err != nil {
 		r.logger.Error("All retry attempts failed",
-			"maxRetries", r.config.Resilience.MaxRetries,
-			"error", lastErr,
+			zap.Int("maxRetries", r.config.Resilience.MaxRetries),
+			zap.Error(lastErr),
 		)
 		return lastErr
 	}

@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-
+	"go.uber.org/zap"
 	"api-gateway/pkg/logging"
 )
 
@@ -19,10 +19,10 @@ func Logger(logger *logging.Logger) fiber.Handler {
 
 		// Log request
 		logger.Debug("Request received",
-			"method", c.Method(),
-			"path", c.Path(),
-			"ip", c.IP(),
-			"request_id", requestID,
+			zap.String("method", c.Method()),
+			zap.String("path", c.Path()),
+			zap.String("ip", c.IP()),
+			zap.String("request_id", requestID),
 		)
 
 		// Process request
@@ -35,28 +35,29 @@ func Logger(logger *logging.Logger) fiber.Handler {
 		statusCode := c.Response().StatusCode()
 		if statusCode >= 500 {
 			logger.Error("Request completed with server error",
-				"method", c.Method(),
-				"path", c.Path(),
-				"status", statusCode,
-				"duration_ms", duration.Milliseconds(),
-				"request_id", requestID,
-				"error", err,
+				zap.String("method", c.Method()),
+				zap.String("path", c.Path()),
+				zap.Int("status", statusCode),
+				zap.Int64("duration_ms", duration.Milliseconds()),
+				zap.String("request_id", requestID),
+				zap.Error(err),
 			)
 		} else if statusCode >= 400 {
 			logger.Warn("Request completed with client error",
-				"method", c.Method(),
-				"path", c.Path(),
-				"status", statusCode,
-				"duration_ms", duration.Milliseconds(),
-				"request_id", requestID,
+				zap.String("method", c.Method()),
+				zap.String("path", c.Path()),
+				zap.Int("status", statusCode),
+				zap.Int64("duration_ms", duration.Milliseconds()),
+				zap.String("request_id", requestID),
+				zap.Error(err),
 			)
 		} else {
 			logger.Info("Request completed successfully",
-				"method", c.Method(),
-				"path", c.Path(),
-				"status", statusCode,
-				"duration_ms", duration.Milliseconds(),
-				"request_id", requestID,
+				zap.String("method", c.Method()),
+				zap.String("path", c.Path()),
+				zap.Int("status", statusCode),
+				zap.Int64("duration_ms", duration.Milliseconds()),
+				zap.String("request_id", requestID),
 			)
 		}
 

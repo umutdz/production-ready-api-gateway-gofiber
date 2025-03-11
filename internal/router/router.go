@@ -7,7 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
-
+	"go.uber.org/zap"
 	"api-gateway/internal/config"
 	"api-gateway/internal/proxy"
 	"api-gateway/internal/resilience"
@@ -84,13 +84,6 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 
 		app.Get(websocketPath, func(c *fiber.Ctx) error {
 			if websocket.IsWebSocketUpgrade(c) {
-				r.logger.Debug("WebSocket upgrade request detected",
-					"service", svc.Name,
-					"path", c.Path(),
-					"original_url", c.OriginalURL(),
-					"query_params", string(c.Context().QueryArgs().QueryString()),
-					"headers", c.GetReqHeaders())
-
 				// Prepare headers
 				headers := make(map[string]string)
 				for key, values := range c.GetReqHeaders() {
@@ -130,11 +123,6 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 				} else {
 					fullPath = strings.TrimSuffix(fullPath, "/*")
 				}
-
-				r.logger.Debug("WebSocket headers prepared",
-					"headers", headers,
-					"path", fullPath)
-
 				c.Locals("ws_headers", headers)
 				c.Locals("ws_path", fullPath)
 				c.Locals("allowed", true)
@@ -143,16 +131,11 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 					wsHeaders := conn.Locals("ws_headers").(map[string]string)
 					wsPath := conn.Locals("ws_path").(string)
 
-					r.logger.Info("Handling WebSocket connection",
-						"service", svc.Name,
-						"path", wsPath,
-						"headers", wsHeaders)
-
 					if err := r.handleWebSocket(conn, svc, wsPath, wsHeaders); err != nil {
 						r.logger.Error("WebSocket handling error",
-							"error", err,
-							"service", svc.Name,
-							"path", wsPath)
+							zap.Error(err),
+							zap.String("service", svc.Name),
+							zap.String("path", wsPath))
 					}
 				}, websocket.Config{
 					HandshakeTimeout: 10 * time.Second,
@@ -160,10 +143,6 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 			}
 			return c.Next()
 		})
-
-		r.logger.Info("Registered WebSocket routes",
-			"service", svc.Name,
-			"base_path", wsPath)
 	}
 
 	// Register HTTP routes
@@ -188,7 +167,7 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 		return r.handleHTTP(c, svc, path)
 	})
 
-	r.logger.Info("Registered HTTP route", "service", svc.Name, "path", basePath+"*")
+	r.logger.Info("Registered HTTP route", zap.String("service", svc.Name), zap.String("path", basePath+"*"))
 
 	return nil
 }

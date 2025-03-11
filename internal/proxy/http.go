@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"go.uber.org/zap"
 
 	"api-gateway/internal/config"
 	"api-gateway/pkg/cache"
@@ -62,9 +63,9 @@ func NewHTTPProxy(cfg *config.Config, logger *logging.Logger) (*HTTPProxy, error
 func (p *HTTPProxy) Forward(c *fiber.Ctx, target, path string, svc config.ServiceConfig) error {
 	// Skip WebSocket requests - they should be handled by the WebSocket proxy
 	if c.Get("Upgrade") == "websocket" {
-		p.logger.Debug("Skipping WebSocket request in HTTP proxy",
-			"path", c.Path(),
-			"service", svc.Name)
+		// p.logger.Debug("Skipping WebSocket request in HTTP proxy",
+		// 	"path", c.Path(),
+		// 	"service", svc.Name)
 		return c.Next()
 	}
 
@@ -73,7 +74,7 @@ func (p *HTTPProxy) Forward(c *fiber.Ctx, target, path string, svc config.Servic
 		queryString := c.Request().URI().QueryString()
 		cacheKey := getCacheKey(c.Path(), string(queryString))
 		if cachedResp, found := p.cache.Get(cacheKey); found {
-			p.logger.Debug("Cache hit", "path", c.Path(), "service", svc.Name)
+			// p.logger.Debug("Cache hit", "path", c.Path(), "service", svc.Name)
 			return c.Send(cachedResp.([]byte))
 		}
 	}
@@ -129,12 +130,12 @@ func (p *HTTPProxy) Forward(c *fiber.Ctx, target, path string, svc config.Servic
 
 	// Log the request
 	p.logger.Debug("Proxied request",
-		"method", c.Method(),
-		"path", c.Path(),
-		"target", requestURL,
-		"status", resp.StatusCode,
-		"duration", time.Since(start).Milliseconds(),
-		"service", svc.Name,
+		zap.String("method", c.Method()),
+		zap.String("path", c.Path()),
+		zap.String("target", requestURL),
+		zap.Int("status", resp.StatusCode),
+		zap.Int64("duration", time.Since(start).Milliseconds()),
+		zap.String("service", svc.Name),
 	)
 
 	// Read the response body

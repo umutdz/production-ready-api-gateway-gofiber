@@ -10,7 +10,7 @@ import (
 
 	"github.com/fasthttp/websocket"
 	fiberws "github.com/gofiber/websocket/v2"
-
+	"go.uber.org/zap"
 	"api-gateway/internal/config"
 	"api-gateway/pkg/logging"
 	"crypto/tls"
@@ -80,7 +80,7 @@ func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path str
 	// Parse the path to handle query parameters correctly
 	parsedPath, err := url.Parse(path)
 	if err != nil {
-		p.logger.Error("Failed to parse path", "path", path, "error", err)
+		// p.logger.Error("Failed to parse path", "path", path, "error", err)
 		parsedPath = &url.URL{Path: path}
 	}
 
@@ -100,9 +100,9 @@ func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path str
 	}
 
 	p.logger.Info("Proxying WebSocket connection",
-		"target_http", httpURL,
-		"target_ws", wsURL,
-		"protocol", headers["Sec-WebSocket-Protocol"])
+		zap.String("target_http", httpURL),
+		zap.String("target_ws", wsURL),
+		zap.String("protocol", headers["Sec-WebSocket-Protocol"]))
 
 	// Prepare headers for the target connection
 	header := http.Header{}
@@ -166,19 +166,19 @@ func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path str
 
 	// Log connection attempt details
 	p.logger.Debug("WebSocket connection details",
-		"target_http", httpURL,
-		"target_ws", wsURL,
-		"headers", header,
-		"protocols", dialer.Subprotocols,
-		"is_socket_io", isSocketIO)
+		zap.String("target_http", httpURL),
+		zap.String("target_ws", wsURL),
+		zap.Any("headers", header),
+		zap.Any("protocols", dialer.Subprotocols),
+		zap.Bool("is_socket_io", isSocketIO))
 
 	// Connect to target WebSocket server with context timeout
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	p.logger.Info("Attempting WebSocket connection",
-		"target_url", wsURL,
-		"headers", header)
+		zap.String("target_url", wsURL),
+		zap.Any("headers", header))
 
 	targetConn, resp, err := dialer.DialContext(ctx, wsURL, header)
 	if err != nil {
@@ -186,24 +186,24 @@ func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path str
 			body := make([]byte, 1024)
 			n, _ := resp.Body.Read(body)
 			p.logger.Error("WebSocket connection failed",
-				"status", resp.Status,
-				"error", err,
-				"target_url", wsURL,
-				"response_body", string(body[:n]),
-				"response_headers", resp.Header,
-				"request_headers", header)
+				zap.Int("status", resp.StatusCode),
+				zap.Error(err),
+				zap.String("target_url", wsURL),
+				zap.String("response_body", string(body[:n])),
+				zap.Any("response_headers", resp.Header),
+				zap.Any("request_headers", header))
 		} else {
 			p.logger.Error("WebSocket connection failed with no response",
-				"error", err,
-				"target_url", wsURL,
-				"request_headers", header)
+				zap.Error(err),
+				zap.String("target_url", wsURL),
+				zap.Any("request_headers", header))
 		}
 		return fmt.Errorf("failed to connect to target WebSocket: %w", err)
 	}
 	defer targetConn.Close()
 
 	p.logger.Info("WebSocket connection established",
-		"target_url", wsURL)
+		zap.String("target_url", wsURL))
 
 	// For Socket.IO, wait for the initial handshake message
 	if isSocketIO {
@@ -211,48 +211,48 @@ func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path str
 		messageType, message, err := targetConn.ReadMessage()
 		if err != nil {
 			p.logger.Error("Socket.IO initial handshake failed",
-				"error", err,
-				"target_url", wsURL)
+				zap.Error(err),
+				zap.String("target_url", wsURL))
 			return fmt.Errorf("Socket.IO handshake failed: %w", err)
 		}
 		p.logger.Info("Socket.IO initial message received from target",
-			"messageType", messageType,
-			"message", string(message),
-			"target_url", wsURL)
+			zap.Int("messageType", messageType),
+			zap.String("message", string(message)),
+			zap.String("target_url", wsURL))
 
 		if err := c.WriteMessage(messageType, message); err != nil {
 			p.logger.Error("Failed to forward Socket.IO initial message to client",
-				"error", err,
-				"target_url", wsURL)
+				zap.Error(err),
+				zap.String("target_url", wsURL))
 			return fmt.Errorf("failed to forward Socket.IO initial message: %w", err)
 		}
 		p.logger.Info("Socket.IO initial message forwarded to client",
-			"messageType", messageType,
-			"message", string(message),
-			"target_url", wsURL)
+			zap.Int("messageType", messageType),
+			zap.String("message", string(message)),
+			zap.String("target_url", wsURL))
 
 		messageType, message, err = c.ReadMessage()
 		if err != nil {
 			p.logger.Error("Failed to receive client's Socket.IO handshake response",
-				"error", err,
-				"target_url", wsURL)
+				zap.Error(err),
+				zap.String("target_url", wsURL))
 			return fmt.Errorf("failed to receive client's Socket.IO handshake response: %w", err)
 		}
 		p.logger.Info("Socket.IO client handshake response received",
-			"messageType", messageType,
-			"message", string(message),
-			"target_url", wsURL)
+			zap.Int("messageType", messageType),
+			zap.String("message", string(message)),
+			zap.String("target_url", wsURL))
 
 		if err := targetConn.WriteMessage(messageType, message); err != nil {
 			p.logger.Error("Failed to forward client's Socket.IO handshake response to target",
-				"error", err,
-				"target_url", wsURL)
+				zap.Error(err),
+				zap.String("target_url", wsURL))
 			return fmt.Errorf("failed to forward client's Socket.IO handshake response: %w", err)
 		}
 		p.logger.Info("Socket.IO client handshake response forwarded to target",
-			"messageType", messageType,
-			"message", string(message),
-			"target_url", wsURL)
+			zap.Int("messageType", messageType),
+			zap.String("message", string(message)),
+			zap.String("target_url", wsURL))
 
 		// Handshake sonrası normal mesajlaşma için deadline’i kaldır
 		targetConn.SetReadDeadline(time.Time{})
@@ -277,30 +277,21 @@ func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path str
 				messageType, message, err := c.ReadMessage()
 				if err != nil {
 					p.logger.Error("Client WebSocket read error",
-						"error", err,
-						"error_type", fmt.Sprintf("%T", err),
-						"is_socket_io", strings.Contains(wsURL, "/socket.io/"))
+						zap.Error(err),
+						zap.String("error_type", fmt.Sprintf("%T", err)),
+						zap.Bool("is_socket_io", strings.Contains(wsURL, "/socket.io/")))
 					errChan <- err
 					return
 				}
-				p.logger.Info("Message received from client",
-					"messageType", messageType,
-					"message", string(message),
-					"is_socket_io", strings.Contains(wsURL, "/socket.io/"))
-
 				err = targetConn.WriteMessage(messageType, message)
 				if err != nil {
 					p.logger.Error("Target WebSocket write error",
-						"error", err,
-						"error_type", fmt.Sprintf("%T", err),
-						"is_socket_io", strings.Contains(wsURL, "/socket.io/"))
+						zap.Error(err),
+						zap.String("error_type", fmt.Sprintf("%T", err)),
+						zap.Bool("is_socket_io", strings.Contains(wsURL, "/socket.io/")))
 					errChan <- err
 					return
 				}
-				p.logger.Info("Message forwarded to target",
-					"messageType", messageType,
-					"message", string(message),
-					"is_socket_io", strings.Contains(wsURL, "/socket.io/"))
 			}
 		}
 	}()
@@ -318,30 +309,21 @@ func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path str
 				messageType, message, err := targetConn.ReadMessage()
 				if err != nil {
 					p.logger.Error("Target WebSocket read error",
-						"error", err,
-						"error_type", fmt.Sprintf("%T", err),
-						"is_socket_io", strings.Contains(wsURL, "/socket.io/"))
+						zap.Error(err),
+						zap.String("error_type", fmt.Sprintf("%T", err)),
+						zap.Bool("is_socket_io", strings.Contains(wsURL, "/socket.io/")))
 					errChan <- err
 					return
 				}
-				p.logger.Info("Message received from target",
-					"messageType", messageType,
-					"message", string(message),
-					"is_socket_io", strings.Contains(wsURL, "/socket.io/"))
-
 				err = c.WriteMessage(messageType, message)
 				if err != nil {
 					p.logger.Error("Client WebSocket write error",
-						"error", err,
-						"error_type", fmt.Sprintf("%T", err),
-						"is_socket_io", strings.Contains(wsURL, "/socket.io/"))
+						zap.Error(err),
+						zap.String("error_type", fmt.Sprintf("%T", err)),
+						zap.Bool("is_socket_io", strings.Contains(wsURL, "/socket.io/")))
 					errChan <- err
 					return
 				}
-				p.logger.Info("Message forwarded to client",
-					"messageType", messageType,
-					"message", string(message),
-					"is_socket_io", strings.Contains(wsURL, "/socket.io/"))
 			}
 		}
 	}()
@@ -355,15 +337,15 @@ func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path str
 			1005, // CloseNoStatus
 			websocket.CloseAbnormalClosure) { // 1006
 			p.logger.Debug("WebSocket connection closed",
-				"error", err,
-				"error_type", fmt.Sprintf("%T", err),
-				"is_socket_io", strings.Contains(wsURL, "/socket.io/"))
+				zap.Error(err),
+				zap.String("error_type", fmt.Sprintf("%T", err)),
+				zap.Bool("is_socket_io", strings.Contains(wsURL, "/socket.io/")))
 		} else {
 			p.logger.Error("WebSocket proxy error",
-				"error", err,
-				"error_type", fmt.Sprintf("%T", err),
-				"target_url", wsURL,
-				"is_socket_io", strings.Contains(wsURL, "/socket.io/"))
+				zap.Error(err),
+				zap.String("error_type", fmt.Sprintf("%T", err)),
+				zap.String("target_url", wsURL),
+				zap.Bool("is_socket_io", strings.Contains(wsURL, "/socket.io/")))
 			return fmt.Errorf("WebSocket proxy error: %w", err)
 		}
 	}
