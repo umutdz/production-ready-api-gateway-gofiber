@@ -152,6 +152,11 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 	}
 
 	app.All(basePath+"*", func(c *fiber.Ctx) error {
+		r.logger.Info("Handling request",
+		zap.String("method", c.Method()),
+		zap.String("path", c.Path()),
+		zap.String("original_url", string(c.Request().URI().Path())),
+		)
 		// Skip if this is a WebSocket request that should be handled by the WebSocket handler
 		if websocket.IsWebSocketUpgrade(c) {
 			return c.Next()
