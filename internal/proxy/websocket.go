@@ -8,13 +8,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fasthttp/websocket"
-	fiberws "github.com/gofiber/websocket/v2"
-	"go.uber.org/zap"
 	"api-gateway/internal/config"
 	"api-gateway/pkg/logging"
 	"crypto/tls"
+
+	"github.com/fasthttp/websocket"
+	fiberws "github.com/gofiber/websocket/v2"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
 )
+
+// Tracer for WebSocket proxy
+var wsTracer = otel.Tracer("websocket-proxy")
 
 // WebSocketProxy handles WebSocket connections and proxying
 type WebSocketProxy struct {
@@ -49,7 +56,34 @@ func NewWebSocketProxy(cfg *config.Config, logger *logging.Logger) (*WebSocketPr
 }
 
 // ProxyWebSocket handles WebSocket connection proxying
-func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path string, headers map[string]string) error {
+func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path string, headers map[string]string, ctx context.Context) error {
+	// Debug: Trace context bilgilerini logla
+	p.logger.Debug("WebSocket proxy starting with context",
+		zap.Bool("context_is_nil", ctx == nil),
+		zap.String("target", target),
+		zap.String("path", path))
+
+	// Trace context için orijinal context'i saklayalım
+	spanCtx := ctx
+
+	// Start a new span for the WebSocket connection
+	var span trace.Span
+	if spanCtx != nil {
+		spanCtx, span = wsTracer.Start(spanCtx, "proxy-websocket-connection")
+		defer span.End()
+
+		p.logger.Debug("Created span for WebSocket connection using provided context",
+			zap.String("span_name", "proxy-websocket-connection"))
+	} else {
+		// Eğer context nil ise yeni bir context oluştur
+		spanCtx = context.Background()
+		spanCtx, span = wsTracer.Start(spanCtx, "proxy-websocket-connection")
+		defer span.End()
+
+		p.logger.Debug("Created span for WebSocket connection using new background context",
+			zap.String("span_name", "proxy-websocket-connection"))
+	}
+
 	// Parse target URL
 	targetURL, err := url.Parse(target)
 	if err != nil {
@@ -134,6 +168,11 @@ func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path str
 	header.Set("X-Source", "api-gateway")
 	header.Set("Host", targetURL.Host)
 
+	// Propagate trace context to outgoing request
+	if span != nil {
+		otel.GetTextMapPropagator().Inject(spanCtx, propagation.HeaderCarrier(header))
+	}
+
 	// Configure dialer for this specific connection
 	dialer := *p.dialer
 	dialer.HandshakeTimeout = time.Second * 10
@@ -173,14 +212,15 @@ func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path str
 		zap.Bool("is_socket_io", isSocketIO))
 
 	// Connect to target WebSocket server with context timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	// Burada her zaman yeni bir background context kullan, trace context'den bağımsız olarak
+	dialCtx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	p.logger.Info("Attempting WebSocket connection",
 		zap.String("target_url", wsURL),
 		zap.Any("headers", header))
 
-	targetConn, resp, err := dialer.DialContext(ctx, wsURL, header)
+	targetConn, resp, err := dialer.DialContext(dialCtx, wsURL, header)
 	if err != nil {
 		if resp != nil {
 			body := make([]byte, 1024)
@@ -254,7 +294,7 @@ func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path str
 			zap.String("message", string(message)),
 			zap.String("target_url", wsURL))
 
-		// Handshake sonrası normal mesajlaşma için deadline’i kaldır
+		// Handshake sonrası normal mesajlaşma için deadline'i kaldır
 		targetConn.SetReadDeadline(time.Time{})
 		c.SetReadDeadline(time.Time{})
 	}

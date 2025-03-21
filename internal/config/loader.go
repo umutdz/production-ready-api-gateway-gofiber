@@ -72,4 +72,9 @@ func setDefaults(v *viper.Viper) {
 	// Metrics defaults
 	v.SetDefault("metrics.enable", true)
 	v.SetDefault("metrics.path", "/metrics")
+
+	// Tracing defaults
+	v.SetDefault("tracing.enable", true)
+	v.SetDefault("tracing.jaeger_endpoint", "jaeger.tracing.svc.cluster.local:4318")
+	v.SetDefault("tracing.service_name", "api-gateway")
 }

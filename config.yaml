@@ -42,13 +42,18 @@ resilience:
   retry_interval: 100
 
 logging:
-  level: "info"
+  level: "debug"
   format: "json"
   output_path: "stdout"
 
 metrics:
   enable: true
   path: "/metrics"
+
+tracing:
+  enable: true
+  jaeger_endpoint: "localhost:4318"
+  service_name: "api-gateway"
 
 services:
   # Crash Game API Service

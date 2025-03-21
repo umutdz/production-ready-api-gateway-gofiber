@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tracing
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: tracing
+  labels:
+    app: jaeger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      containers:
+      - name: jaeger
+        image: jaegertracing/all-in-one:latest
+        ports:
+        - containerPort: 16686  # Jaeger UI
+        - containerPort: 14268  # HTTP collector (traces buraya gelir)
+        - containerPort: 14250  # gRPC collector (OTLP için)
+        - containerPort: 9411   # Zipkin uyumlu port
+        - containerPort: 14269  # Metrics port (Prometheus için)
+        - containerPort: 4317   # OTLP gRPC port
+        - containerPort: 4318   # OTLP HTTP port
+        env:
+        - name: COLLECTOR_ZIPKIN_HOST_PORT
+          value: ":9411"
+        - name: JAEGER_DISABLED
+          value: "false"
+        - name: COLLECTOR_OTLP_ENABLED
+          value: "true"
+        - name: COLLECTOR_OTLP_GRPC_HOST_PORT
+          value: ":4317"
+        - name: COLLECTOR_OTLP_HTTP_HOST_PORT
+          value: ":4318"
+        - name: SPAN_STORAGE_TYPE
+          value: "memory"
+        - name: QUERY_BASE_PATH
+          value: "/"
+        - name: COLLECTOR_OTLP_GRPC_ENABLED
+          value: "true"
+        - name: COLLECTOR_OTLP_HTTP_ENABLED
+          value: "true"
+        - name: COLLECTOR_DEBUG
+          value: "true"
+        - name: LOG_LEVEL
+          value: "debug"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  namespace: tracing
+  labels:
+    app: jaeger
+spec:
+  ports:
+  - port: 16686
+    targetPort: 16686
+    name: ui
+  - port: 14268
+    targetPort: 14268
+    name: collector-http
+  - port: 14250
+    targetPort: 14250
+    name: collector-grpc
+  - port: 9411
+    targetPort: 9411
+    name: zipkin
+  - port: 14269
+    targetPort: 14269
+    name: metrics
+  - port: 4317
+    targetPort: 4317
+    name: otlp-grpc
+  - port: 4318
+    targetPort: 4318
+    name: otlp-http
+  selector:
+    app: jaeger
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-ui
+  namespace: tracing
+spec:
+  ports:
+  - port: 80
+    targetPort: 16686
+  selector:
+    app: jaeger
+  type: LoadBalancer  # Localde dış erişim için (Minikube/kind için)
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jaeger-ingress
+  namespace: tracing
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: jaeger.gateway
+    http:
+      paths:
+      - path: /(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: jaeger
+            port:
+              number: 16686

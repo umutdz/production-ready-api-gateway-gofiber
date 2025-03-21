@@ -10,12 +10,17 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"go.uber.org/zap"
 
 	"api-gateway/internal/config"
 	"api-gateway/pkg/cache"
 	"api-gateway/pkg/logging"
 )
+
+// Tracer for HTTP proxy
+var tracer = otel.Tracer("http-proxy")
 
 // HTTPProxy handles HTTP proxying
 type HTTPProxy struct {
@@ -69,6 +74,10 @@ func (p *HTTPProxy) Forward(c *fiber.Ctx, target, path string, svc config.Servic
 		return c.Next()
 	}
 
+	// Start a new span for the proxy request
+	ctx, span := tracer.Start(c.UserContext(), "proxy-http-request")
+	defer span.End()
+
 	// Check if response is in cache - TODO: Cache change to redis from in-memory cache
 	if p.config.Proxy.EnableCache && p.cache != nil && c.Method() == fiber.MethodGet {
 		queryString := c.Request().URI().QueryString()
@@ -102,7 +111,7 @@ func (p *HTTPProxy) Forward(c *fiber.Ctx, target, path string, svc config.Servic
 	}
 
 	// Create the request
-	req, err := http.NewRequest(c.Method(), requestURL, bytes.NewReader(c.Body()))
+	req, err := http.NewRequestWithContext(ctx, c.Method(), requestURL, bytes.NewReader(c.Body()))
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create request")
 	}
@@ -119,6 +128,9 @@ func (p *HTTPProxy) Forward(c *fiber.Ctx, target, path string, svc config.Servic
 	for key, value := range svc.Headers {
 		req.Header.Set(key, value)
 	}
+
+	// Propagate trace context to outgoing request
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 
 	// Execute the request
 	start := time.Now()

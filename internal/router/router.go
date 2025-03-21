@@ -1,17 +1,20 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/websocket/v2"
-	"go.uber.org/zap"
 	"api-gateway/internal/config"
 	"api-gateway/internal/proxy"
 	"api-gateway/internal/resilience"
 	"api-gateway/pkg/logging"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/websocket/v2"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 // Router handles dynamic routing and service discovery
@@ -127,11 +130,22 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 				c.Locals("ws_path", fullPath)
 				c.Locals("allowed", true)
 
+				// Store trace context for WebSocket handler
+				c.Locals("trace_context", c.UserContext())
+
 				return websocket.New(func(conn *websocket.Conn) {
 					wsHeaders := conn.Locals("ws_headers").(map[string]string)
 					wsPath := conn.Locals("ws_path").(string)
 
-					if err := r.handleWebSocket(conn, svc, wsPath, wsHeaders); err != nil {
+					// Get trace context from locals
+					var ctx context.Context
+					if traceCtx, ok := conn.Locals("trace_context").(context.Context); ok {
+						ctx = traceCtx
+					} else {
+						ctx = context.Background()
+					}
+
+					if err := r.handleWebSocket(conn, svc, wsPath, wsHeaders, ctx); err != nil {
 						r.logger.Error("WebSocket handling error",
 							zap.Error(err),
 							zap.String("service", svc.Name),
@@ -179,6 +193,13 @@ func (r *Router) RegisterService(app *fiber.App, svc config.ServiceConfig) error
 
 // handleHTTP handles HTTP requests
 func (r *Router) handleHTTP(c *fiber.Ctx, svc config.ServiceConfig, path string) error {
+	// Add request ID header if not present
+	requestID := c.Get("X-Request-ID")
+	if requestID == "" {
+		requestID = uuid.New().String()
+		c.Set("X-Request-ID", requestID)
+	}
+
 	// Add custom headers if configured
 	for key, value := range svc.Headers {
 		c.Request().Header.Set(key, value)
@@ -189,6 +210,15 @@ func (r *Router) handleHTTP(c *fiber.Ctx, svc config.ServiceConfig, path string)
 	if err != nil {
 		return err
 	}
+
+	// Log the request routing
+	r.logger.Debug("Routing request",
+		zap.String("method", c.Method()),
+		zap.String("path", c.Path()),
+		zap.String("target", target),
+		zap.String("service", svc.Name),
+		zap.String("request_id", requestID),
+	)
 
 	// Handle request with resilience patterns if enabled
 	if r.config.Resilience.EnableCircuitBreaker && r.breaker != nil {
@@ -211,26 +241,32 @@ func (r *Router) handleHTTP(c *fiber.Ctx, svc config.ServiceConfig, path string)
 }
 
 // handleWebSocket handles WebSocket connections
-func (r *Router) handleWebSocket(c *websocket.Conn, svc config.ServiceConfig, path string, headers map[string]string) error {
+func (r *Router) handleWebSocket(c *websocket.Conn, svc config.ServiceConfig, path string, headers map[string]string, ctx context.Context) error {
 	// Get target service URL
 	target, err := r.getTarget(svc)
 	if err != nil {
 		return fmt.Errorf("failed to get target service URL: %w", err)
 	}
-    wsPath := path
-    if svc.StripBasePath {
-        wsPath = strings.TrimPrefix(path, svc.BasePath)
-        if wsPath == "" {
-            wsPath = "/" // Boşsa kök dizine yönlendir
-        }
-    }
+	wsPath := path
+	if svc.StripBasePath {
+		wsPath = strings.TrimPrefix(path, svc.BasePath)
+		if wsPath == "" {
+			wsPath = "/" // Boşsa kök dizine yönlendir
+		}
+	}
 
     // İç servis için varsayılan WebSocket yolunu ekle (örneğin /socket.io)
     if !strings.HasPrefix(wsPath, "/socket.io") {
         wsPath = "/socket.io" + wsPath
     }
+
+	// Log computed path
+	r.logger.Info("Computed WebSocket path",
+		zap.String("wsPath", wsPath),
+		zap.String("service_name", svc.Name))
+
 	// Proxy WebSocket connection
-	if err := r.wsProxy.ProxyWebSocket(c, target, wsPath, headers); err != nil {
+	if err := r.wsProxy.ProxyWebSocket(c, target, wsPath, headers, ctx); err != nil {
 		return fmt.Errorf("failed to proxy WebSocket: %w", err)
 	}
 

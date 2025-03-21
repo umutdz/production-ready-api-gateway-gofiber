@@ -58,6 +58,11 @@ data:
       enable: true
       path: "/metrics"
 
+    tracing:
+      enable: true
+      jaeger_endpoint: "jaeger.tracing.svc.cluster.local:4318"
+      service_name: "api-gateway"
+
     services:
       # Crash Game API Service
       - name: "ice-age-royal-api"

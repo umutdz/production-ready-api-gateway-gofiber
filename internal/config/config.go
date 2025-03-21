@@ -8,6 +8,7 @@ type Config struct {
 	Resilience ResilienceConfig `mapstructure:"resilience"`
 	Logging    LoggingConfig    `mapstructure:"logging"`
 	Metrics    MetricsConfig    `mapstructure:"metrics"`
+	Tracing    TracingConfig    `mapstructure:"tracing"`
 	Services   []ServiceConfig  `mapstructure:"services"`
 }
 
@@ -63,6 +64,13 @@ type LoggingConfig struct {
 type MetricsConfig struct {
 	Enable bool   `mapstructure:"enable"`
 	Path   string `mapstructure:"path"`
+}
+
+// TracingConfig contains tracing-related configuration
+type TracingConfig struct {
+	Enable         bool   `mapstructure:"enable"`
+	ServiceName    string `mapstructure:"service_name"`
+	JaegerEndpoint string `mapstructure:"jaeger_endpoint"`
 }
 
 // ServiceConfig contains service-related configuration
