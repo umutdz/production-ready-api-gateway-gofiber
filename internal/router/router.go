@@ -225,19 +225,19 @@ func (r *Router) handleHTTP(c *fiber.Ctx, svc config.ServiceConfig, path string)
 		return r.breaker.Execute(func() error {
 			if r.config.Resilience.EnableRetry && r.retrier != nil {
 				return r.retrier.Execute(func() error {
-					return r.httpProxy.Forward(c, target, path, svc)
+					return r.httpProxy.Forward(c, target, path, svc, r.config)
 				})
 			}
-			return r.httpProxy.Forward(c, target, path, svc)
+			return r.httpProxy.Forward(c, target, path, svc, r.config)
 		})
 	} else if r.config.Resilience.EnableRetry && r.retrier != nil {
 		return r.retrier.Execute(func() error {
-			return r.httpProxy.Forward(c, target, path, svc)
+			return r.httpProxy.Forward(c, target, path, svc, r.config)
 		})
 	}
 
 	// Forward the request directly
-	return r.httpProxy.Forward(c, target, path, svc)
+	return r.httpProxy.Forward(c, target, path, svc, r.config)
 }
 
 // handleWebSocket handles WebSocket connections

@@ -17,14 +17,6 @@ func InitTracer(ctx context.Context, serviceName string, jaegerEndpoint string) 
 	var exporter sdktrace.SpanExporter
 	var err error
 
-	// Use OTLP/gRPC protocol with the endpoint from config
-	// Default to standard port if not provided
-	if jaegerEndpoint == "" {
-		jaegerEndpoint = "jaeger.tracing.svc.cluster.local:4317" // Using gRPC port 4317 instead of HTTP port 4318
-	}
-	if serviceName == "" {
-		serviceName = "api-gateway"
-	}
 
 	// Log the endpoint being used
 	zap.L().Info("Initializing OTLP gRPC exporter",

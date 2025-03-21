@@ -57,31 +57,23 @@ func NewWebSocketProxy(cfg *config.Config, logger *logging.Logger) (*WebSocketPr
 
 // ProxyWebSocket handles WebSocket connection proxying
 func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path string, headers map[string]string, ctx context.Context) error {
-	// Debug: Trace context bilgilerini logla
 	p.logger.Debug("WebSocket proxy starting with context",
 		zap.Bool("context_is_nil", ctx == nil),
 		zap.String("target", target),
 		zap.String("path", path))
 
-	// Trace context için orijinal context'i saklayalım
 	spanCtx := ctx
 
 	// Start a new span for the WebSocket connection
+	// TODO: Span context can see with first span in jaeger
 	var span trace.Span
 	if spanCtx != nil {
-		spanCtx, span = wsTracer.Start(spanCtx, "proxy-websocket-connection")
+		spanCtx, span = wsTracer.Start(spanCtx, p.config.Tracing.ServiceName)
 		defer span.End()
-
-		p.logger.Debug("Created span for WebSocket connection using provided context",
-			zap.String("span_name", "proxy-websocket-connection"))
 	} else {
-		// Eğer context nil ise yeni bir context oluştur
 		spanCtx = context.Background()
-		spanCtx, span = wsTracer.Start(spanCtx, "proxy-websocket-connection")
+		spanCtx, span = wsTracer.Start(spanCtx, p.config.Tracing.ServiceName)
 		defer span.End()
-
-		p.logger.Debug("Created span for WebSocket connection using new background context",
-			zap.String("span_name", "proxy-websocket-connection"))
 	}
 
 	// Parse target URL
@@ -114,7 +106,6 @@ func (p *WebSocketProxy) ProxyWebSocket(c *fiberws.Conn, target string, path str
 	// Parse the path to handle query parameters correctly
 	parsedPath, err := url.Parse(path)
 	if err != nil {
-		// p.logger.Error("Failed to parse path", "path", path, "error", err)
 		parsedPath = &url.URL{Path: path}
 	}
 

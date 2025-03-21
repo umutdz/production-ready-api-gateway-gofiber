@@ -65,7 +65,7 @@ func NewHTTPProxy(cfg *config.Config, logger *logging.Logger) (*HTTPProxy, error
 }
 
 // Forward forwards an HTTP request to the target service
-func (p *HTTPProxy) Forward(c *fiber.Ctx, target, path string, svc config.ServiceConfig) error {
+func (p *HTTPProxy) Forward(c *fiber.Ctx, target, path string, svc config.ServiceConfig, cfg *config.Config) error {
 	// Skip WebSocket requests - they should be handled by the WebSocket proxy
 	if c.Get("Upgrade") == "websocket" {
 		// p.logger.Debug("Skipping WebSocket request in HTTP proxy",
@@ -75,7 +75,7 @@ func (p *HTTPProxy) Forward(c *fiber.Ctx, target, path string, svc config.Servic
 	}
 
 	// Start a new span for the proxy request
-	ctx, span := tracer.Start(c.UserContext(), "proxy-http-request")
+	ctx, span := tracer.Start(c.UserContext(), cfg.Tracing.ServiceName)
 	defer span.End()
 
 	// Check if response is in cache - TODO: Cache change to redis from in-memory cache
